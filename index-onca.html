@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Amigos da Onça</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap">
+<script>
+/* =====================================================================
+   CONFIGURAÇÃO DO FIREBASE
+   Cole aqui o objeto que o Firebase mostra em
+   Configurações do projeto → Seus apps → app Web (firebaseConfig).
+   Se databaseURL ficar vazio, o jogo roda em "modo de teste": o modo TV
+   funciona normal e a votação só funciona entre abas do mesmo navegador.
+   ===================================================================== */
+window.FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  databaseURL: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* Layout: palco de TV escuro; a carta é um cartão cor de onça no centro, o placar fica à direita. No celular, coluna única. */
+:root{
+  --noite:#141110; --noite-2:#201A16; --noite-3:#2C241E;
+  --onca:#F2A33A; --onca-funda:#C9761C; --pinta:#1A1209;
+  --osso:#F4EDE4; --osso-2:#B8AC9F;
+  --sangue:#FF5143; --ok:#7BD88F;
+  --linha:rgba(244,237,228,.16);
+  --f-cartaz:"Dela Gothic One","Arial Black",Impact,sans-serif;
+  --f-texto:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{background:var(--noite);color:var(--osso)}
+body{margin:0;font-family:var(--f-texto);font-size:16px;line-height:1.4}
+h1,h2,h3,p,ul,ol{margin:0}
+ul,ol{padding:0;list-style:none}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--onca);outline-offset:2px}
+[hidden]{display:none!important}
+
+.app{max-width:1240px;margin-inline:auto;padding-inline:16px;padding-block:14px 40px;display:grid;gap:22px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:960px){
+  .app.host{grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+  .app.host .topo{grid-column:1/-1}
+}
+.app.fone{max-width:560px}
+
+.topo{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 18px;padding-bottom:12px;border-bottom:1px solid var(--linha)}
+.marca{font-family:var(--f-cartaz);font-weight:400;font-size:clamp(24px,4.4vw,40px);line-height:1;letter-spacing:-.01em}
+.marca em{font-style:normal;color:var(--onca)}
+.topo-lado{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border:1px solid var(--linha);border-radius:999px;padding:4px 10px;color:var(--osso-2);white-space:nowrap}
+.chip.ok{color:var(--ok);border-color:var(--ok)}
+.chip.mal{color:var(--sangue);border-color:var(--sangue)}
+.chip.sala{color:var(--onca);border-color:var(--onca)}
+
+.palco{display:grid;gap:22px;min-width:0}
+.bloco{display:grid;gap:12px;min-width:0}
+.rotulo{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--osso-2)}
+.chamada{font-family:var(--f-cartaz);font-weight:400;font-size:clamp(22px,3.6vw,34px);line-height:1.1;text-wrap:balance}
+.nota{font-size:14px;color:var(--osso-2);max-width:64ch}
+
+.btn{background:var(--onca);color:var(--pinta);border:0;border-radius:10px;font-weight:800;font-size:17px;padding:13px 20px;min-height:48px}
+.btn.sec{background:transparent;color:var(--osso);border:1.5px solid var(--linha)}
+.btn.mini{font-size:13px;padding:6px 11px;min-height:34px;border-radius:8px}
+.btn.perigo{background:transparent;color:var(--sangue);border:1.5px solid var(--sangue)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.acoes{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{background:transparent;border:1.5px solid var(--linha);border-radius:999px;padding:8px 14px;font-weight:800;font-size:14px;min-height:40px;color:var(--osso)}
+.seg button[aria-pressed="true"]{background:var(--osso);color:var(--noite);border-color:var(--osso)}
+.ajustes{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.ajuste{display:grid;gap:8px;align-content:start;min-width:0}
+
+input[type=text],textarea{background:var(--noite-2);border:1.5px solid var(--linha);border-radius:10px;padding:11px 12px;min-height:46px;width:100%;min-width:0}
+textarea{min-height:130px;resize:vertical;line-height:1.45}
+.linha-form{display:flex;gap:8px;flex-wrap:wrap}
+.linha-form input{flex:1 1 180px}
+
+/* Entrada pelo QR */
+.entrada{display:grid;gap:18px;grid-template-columns:auto minmax(0,1fr);align-items:start;background:var(--noite-2);border-radius:16px;padding:18px}
+@media (max-width:620px){.entrada{grid-template-columns:minmax(0,1fr)}}
+.qr{background:var(--onca);padding:12px;border-radius:12px;width:max-content;max-width:100%}
+.qr img,.qr canvas{display:block;width:200px;height:200px;max-width:100%}
+.codigo{font-family:var(--f-cartaz);font-size:clamp(40px,7vw,64px);line-height:1;letter-spacing:.08em;color:var(--onca)}
+.endereco{font-size:14px;color:var(--osso-2);overflow-wrap:anywhere}
+
+.pessoas{display:flex;flex-wrap:wrap;gap:8px}
+.pessoa{display:flex;align-items:center;gap:8px;background:var(--noite-3);border-radius:999px;padding:6px 6px 6px 14px;font-weight:700}
+.pessoa .x{background:transparent;border:0;color:var(--osso-2);font-size:13px;font-weight:800;padding:4px 8px;border-radius:999px}
+.pessoa.votou{background:var(--osso);color:var(--noite)}
+.pessoa.esperando{opacity:.55}
+.lista-tv{display:grid;gap:8px}
+.lista-tv li{display:flex;gap:8px}
+.lista-tv input{flex:1 1 auto}
+
+/* A carta */
+.carta{position:relative;background:var(--onca);color:var(--pinta);border-radius:22px;padding:clamp(22px,4vw,46px) clamp(20px,4vw,48px) clamp(26px,4vw,50px);display:grid;gap:14px;overflow:hidden;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(26,18,9,.16) 0 3px, transparent 4px),
+    radial-gradient(circle at 50% 50%, transparent 0 7px, rgba(26,18,9,.14) 8px 11px, transparent 12px);
+  background-size:46px 46px,46px 46px;background-position:0 0,23px 23px}
+.carta .nivel{justify-self:start;font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;background:var(--pinta);color:var(--onca);border-radius:999px;padding:4px 11px}
+.carta .texto{font-family:var(--f-cartaz);font-weight:400;font-size:clamp(26px,4.6vw,60px);line-height:1.08;text-wrap:balance;max-width:24ch}
+.carta .rodape-carta{font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+.fone .carta .texto{font-size:clamp(22px,6.4vw,34px)}
+.carta.nova{animation:vira .45s ease-out}
+@keyframes vira{from{transform:rotateX(70deg) scale(.96);opacity:.2}to{transform:none;opacity:1}}
+
+/* Escolha no modo TV e no celular */
+.alvos{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.alvo{background:var(--noite-2);border:1.5px solid var(--linha);border-radius:14px;padding:16px 14px;font-weight:800;font-size:18px;text-align:left;min-height:58px;overflow-wrap:anywhere}
+.alvo:hover{border-color:var(--onca)}
+.alvo[aria-pressed="true"]{background:var(--onca);color:var(--pinta);border-color:var(--onca)}
+.fone .alvos{grid-template-columns:minmax(0,1fr)}
+
+/* Revelação */
+.apuracao{display:grid;gap:8px}
+.barra{display:grid;grid-template-columns:minmax(90px,30%) minmax(0,1fr) 3ch;gap:12px;align-items:center}
+.barra .quem{font-weight:800;overflow-wrap:anywhere}
+.barra .trilho{height:26px;background:var(--noite-2);border-radius:999px;overflow:hidden}
+.barra .enche{height:100%;background:var(--osso-2);border-radius:999px;transform-origin:left center}
+.barra.culpado .enche{background:var(--sangue)}
+.barra.culpado .quem{color:var(--sangue)}
+.barra .n{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.anima .barra{animation:surge .4s ease-out both;animation-delay:calc(var(--i) * 550ms)}
+.anima .barra .enche{animation:enche .5s ease-out both;animation-delay:calc(var(--i) * 550ms + 150ms)}
+.anima .veredito{animation:surge .5s ease-out both;animation-delay:calc(var(--n) * 550ms + 300ms)}
+@keyframes surge{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes enche{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.veredito{font-family:var(--f-cartaz);font-weight:400;font-size:clamp(26px,4.4vw,48px);line-height:1.08;color:var(--sangue);text-wrap:balance}
+.dedos{display:grid;gap:4px;font-size:15px}
+.dedos li span{color:var(--osso-2)}
+@media (prefers-reduced-motion:reduce){.anima .barra,.anima .barra .enche,.anima .veredito,.carta.nova{animation:none}}
+
+/* Placar */
+.placar{display:grid;gap:12px;min-width:0;background:var(--noite-2);border-radius:16px;padding:16px}
+@media (min-width:960px){.placar{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}}
+.placar h2{font-family:var(--f-cartaz);font-weight:400;font-size:22px}
+.contas{display:grid}
+.conta{display:grid;gap:5px;padding:10px 0;border-top:1px solid var(--linha)}
+.conta-topo{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.conta-nome{font-weight:800;min-width:0;overflow-wrap:anywhere}
+.cartinhas{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end}
+.cartinhas i{width:11px;height:15px;border-radius:2px;background:var(--onca);display:block}
+.cartinhas b{font-weight:800;font-variant-numeric:tabular-nums}
+.conta-info{font-size:13px;color:var(--osso-2)}
+.divida{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.deve{color:var(--sangue);font-weight:800}
+
+.rank{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+.rank-rolo{overflow-x:auto}
+.rank th{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--osso-2);text-align:right;padding:6px 8px}
+.rank td{padding:10px 8px;border-top:1px solid var(--linha);text-align:right;font-weight:600}
+.rank th:nth-child(2),.rank td:nth-child(2){text-align:left}
+.rank tr.topo-rank td{color:var(--onca);font-weight:800}
+.titulos{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.titulo{background:var(--noite-2);border-radius:14px;padding:14px;display:grid;gap:4px}
+.titulo h3{font-family:var(--f-cartaz);font-weight:400;font-size:19px;color:var(--onca)}
+.titulo strong{font-size:18px}
+.titulo span{font-size:14px;color:var(--osso-2)}
+
+.aviso{background:var(--noite-2);border-left:4px solid var(--onca);border-radius:8px;padding:12px 14px;font-size:15px;max-width:70ch}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------------- Baralho inicial ---------------- */
+const NIVEIS={morno:"Morno",acido:"Ácido",semperdao:"Sem perdão",turma:"Da turma"};
+const CARTAS={
+morno:[
+"Ganhamos na loteria: quem torra tudo primeiro?",
+"Quem chegaria atrasado no próprio casamento?",
+"Quem ainda deve dinheiro para alguém desta mesa?",
+"Quem é o primeiro a morrer num filme de terror?",
+"Quem manda áudio de quatro minutos para dizer \"ok\"?",
+"Quem some do grupo e só aparece quando precisa de favor?",
+"Quem seria barrado primeiro na imigração?",
+"Quem pede \"só um pedacinho\" e come metade?",
+"Quem diz \"vou só dar uma passadinha\" e fica até as cinco da manhã?",
+"Quem tem mais chance de virar coach de Instagram?",
+"Quem esquece o aniversário dos amigos e culpa o celular?",
+"Quem dorme primeiro na festa?",
+"Quem se perde até com GPS?",
+"Quem ainda usa \"123456\" como senha?",
+"Quem seria eliminado primeiro num reality show?",
+"Quem cobra no Pix os R$ 3,50 da coxinha?",
+"Quem chora vendo comercial de margarina?",
+"Quem pega o último pedaço de pizza sem perguntar?",
+"Quem vai ser o chato do grupo do condomínio?",
+"Quem já pagou mico tentando parecer descolado?"],
+acido:[
+"Quem trairia a turma por um pastel?",
+"Quem tem o pior dedo para escolher relacionamento?",
+"Quem é o mais falso desta mesa?",
+"Quem fala mal de todo mundo assim que sai da roda?",
+"Quem venderia a própria mãe por um celular novo?",
+"Quem já stalkeou o ex hoje?",
+"Quem mente no currículo com mais convicção?",
+"Quem é o amigo que só serve para segurar a bolsa?",
+"Quem vai terminar sozinho com quinze gatos?",
+"Quem guarda o print mais comprometedor da turma?",
+"Quem é o pior conselheiro amoroso?",
+"Quem finge que está trabalhando no home office?",
+"Quem entregaria a turma inteira num interrogatório?",
+"Quem acha que é engraçado, mas não é?",
+"Quem posta indireta e jura que não é para ninguém?",
+"Quem leva um \"não\" e manda mensagem às três da manhã?",
+"Quem tem mais cara de golpista do Pix?",
+"Quem é o mais pão-duro desta mesa?",
+"Quem pagaria para não ir ao casamento de alguém daqui?",
+"Quem promete que vai pagar a próxima rodada e nunca paga?"],
+semperdao:[
+"Quem teria o histórico de busca mais constrangedor?",
+"Quem ficaria com o ex de alguém desta mesa?",
+"Quem tem mais chance de aparecer bêbado no jornal da noite?",
+"Quem fingiria a própria morte para fugir de dívida?",
+"Quem você não deixaria sozinho com seu namorado ou namorada?",
+"Quem tem mais contatos salvos como \"Não atender\"?",
+"Quem seria cancelado em uma semana se ficasse famoso?",
+"Quem já inventou doença para fugir de rolê desta turma?",
+"Quem você nunca deixaria saber a senha do seu celular?",
+"Quem fica mais insuportável depois do terceiro copo?",
+"Quem tem um grupo secreto só para falar mal desta turma?",
+"Quem morreria de vergonha se o celular fosse lido em voz alta?",
+"Quem já mandou print da conversa para a própria pessoa da conversa?",
+"Quem casaria por dinheiro sem pensar duas vezes?",
+"Quem deixaria um amigo preso para não perder o show?",
+"Quem é o amigo da onça oficial desta turma?",
+"Quem acordaria em outra cidade depois de uma noitada?",
+"Quem seria o vilão da novela da vida desta turma?",
+"Quem esconderia um corpo sem fazer nenhuma pergunta?",
+"Quem já falou mal de alguém daqui para outra pessoa daqui?"]
+};
+
+/* ---------------- Rede: Firebase ou modo de teste ---------------- */
+const CFG=window.FIREBASE_CONFIG||{};
+const temFirebase=!!(CFG.databaseURL&&window.firebase&&firebase.database);
+const clone=v=>v==null?null:JSON.parse(JSON.stringify(v));
+
+function redeFirebase(){
+  firebase.initializeApp(CFG);
+  const db=firebase.database();
+  const r={tipo:"firebase",conectado:false,
+    ouvir(p,cb){const ref=db.ref(p),f=s=>cb(s.val());ref.on("value",f);return()=>ref.off("value",f);},
+    set(p,v){return db.ref(p).set(v);},
+    update(p,o){return db.ref(p).update(o);},
+    remove(p){return db.ref(p).remove();}};
+  db.ref(".info/connected").on("value",s=>{r.conectado=!!s.val();desenhar();});
+  return r;
+}
+function redeLocal(){
+  const KEY="aonca-rede-local",ouvintes=[];
+  let bc=null; try{bc=new BroadcastChannel("aonca");}catch(e){}
+  const ler=()=>{try{return JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){return {};}};
+  const pegar=(db,p)=>p.split("/").reduce((o,k)=>o&&o[k]!==undefined?o[k]:null,db);
+  const por=(db,p,v)=>{const ks=p.split("/");let o=db;for(let i=0;i<ks.length-1;i++){if(typeof o[ks[i]]!=="object"||o[ks[i]]===null)o[ks[i]]={};o=o[ks[i]];}
+    if(v===null)delete o[ks[ks.length-1]];else o[ks[ks.length-1]]=clone(v);};
+  const avisar=()=>{const db=ler();ouvintes.slice().forEach(l=>l.cb(clone(pegar(db,l.path))));};
+  const gravar=db=>{try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){}avisar();if(bc)bc.postMessage(1);};
+  if(bc)bc.onmessage=avisar;
+  window.addEventListener("storage",e=>{if(e.key===KEY)avisar();});
+  return {tipo:"local",conectado:true,
+    ouvir(p,cb){const l={path:p,cb};ouvintes.push(l);setTimeout(()=>cb(clone(pegar(ler(),p))),0);return()=>{const i=ouvintes.indexOf(l);if(i>=0)ouvintes.splice(i,1);};},
+    set(p,v){const db=ler();por(db,p,v);gravar(db);},
+    update(p,o){const db=ler();for(const k in o)por(db,p+"/"+k,o[k]);gravar(db);},
+    remove(p){const db=ler();por(db,p,null);gravar(db);}};
+}
+let rede=null;
+try{rede=temFirebase?redeFirebase():redeLocal();}catch(e){rede=redeLocal();}
+
+/* ---------------- Utilidades ---------------- */
+const $=s=>document.querySelector(s);
+const esc=t=>String(t==null?"":t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sorte=n=>Math.floor(Math.random()*n);
+const embaralha=a=>{for(let i=a.length-1;i>0;i--){const j=sorte(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
+const novoId=()=>Math.random().toString(36).slice(2,10);
+const lista=n=>n.length<2?n.join(""):n.slice(0,-1).join(", ")+" e "+n[n.length-1];
+const pl=(n,um,v)=>n+" "+(n===1?um:v);
+const guardar=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}};
+const abrir=k=>{try{return JSON.parse(localStorage.getItem(k)||"null");}catch(e){return null;}};
+const reduz=window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches;
+function novoCodigo(){const L="ABCDEFGHJKLMNPQRSTUVWXYZ";let c="";for(let i=0;i<4;i++)c+=L[sorte(L.length)];return c;}
+
+const params=new URLSearchParams(location.search);
+const SALA_FONE=(params.get("sala")||"").toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
+const EH_FONE=SALA_FONE.length===4;
+
+/* =====================================================================
+   TELA PRINCIPAL (TV)
+   ===================================================================== */
+const CHAVE_HOST="aonca-host-v1";
+let h=null, remoto={}, desligar=null, ultimaAss="", timerRevela=null, animarAte=0;
+
+function hostNovo(){
+  return {modo:temFirebase?"voto":"tv",sala:novoCodigo(),fase:"inicio",
+    jogadoresTV:["Ana","Beto","Caio","Duda","Edu"].map(n=>({id:novoId(),nome:n})),exemploTV:true,
+    niveis:{morno:true,acido:true,semperdao:false,turma:true},turma:"",porShot:1,
+    baralho:[],rodada:null,placar:{},nomes:{},verVotos:false,unanimes:{},recebidos:{},n:0};
+}
+function salvarHost(){guardar(CHAVE_HOST,h);}
+
+function cartasDaTurma(){return h.turma.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);}
+function contaNivel(nv){return nv==="turma"?cartasDaTurma().length:CARTAS[nv].length;}
+function totalCartas(){return Object.keys(NIVEIS).reduce((t,nv)=>t+(h.niveis[nv]?contaNivel(nv):0),0);}
+function montarBaralho(){
+  const b=[];
+  for(const nv of Object.keys(NIVEIS)){ if(!h.niveis[nv]) continue;
+    (nv==="turma"?cartasDaTurma():CARTAS[nv]).forEach(t=>b.push({t,nv})); }
+  return embaralha(b);
+}
+
+function jogadores(){
+  if(h.modo==="tv") return h.jogadoresTV.map(p=>({id:p.id,nome:p.nome||"Sem nome"}));
+  const j=remoto.jogadores||{};
+  return Object.keys(j).map(id=>({id,nome:j[id].nome||"Sem nome",entrou:j[id].entrou||0})).sort((a,b)=>a.entrou-b.entrou);
+}
+function nomeDe(id){const p=jogadores().find(x=>x.id===id);return p?p.nome:(h.nomes[id]||"Alguém");}
+function votosDaRodada(){const r=h.rodada;if(!r)return {};return ((remoto.votos||{})[r.n])||{};}
+
+function ligarSala(){
+  if(desligar) desligar();
+  remoto={};
+  desligar=rede.ouvir("salas/"+h.sala,v=>{remoto=v||{};aoMudarRemoto();desenhar();});
+  publicarEstado();
+}
+function publicarEstado(){
+  if(h.modo!=="voto") return;
+  rede.update("salas/"+h.sala,{fase:h.fase,criada:remoto.criada||Date.now(),rodada:h.rodada?{n:h.rodada.n,t:h.rodada.t,nv:h.rodada.nv,estado:h.rodada.estado,culpados:h.rodada.culpados||[],cont:h.rodada.cont||{}}:null,placar:placarPublico()});
+}
+function placarPublico(){
+  const o={};jogadores().forEach(p=>{o[p.id]={nome:p.nome,cartas:(h.placar[p.id]||{}).cartas||0};});
+  Object.keys(h.placar).forEach(id=>{if(!o[id])o[id]={nome:h.nomes[id]||"Alguém",cartas:h.placar[id].cartas||0};});
+  return o;
+}
+function aoMudarRemoto(){
+  jogadores().forEach(p=>{h.nomes[p.id]=p.nome;});
+  const r=h.rodada;
+  if(h.modo==="voto"&&h.fase==="jogo"&&r&&r.estado==="votando"){
+    const js=jogadores(),v=votosDaRodada();
+    const todos=js.length>=2&&js.every(p=>v[p.id]);
+    clearTimeout(timerRevela);
+    if(todos) timerRevela=setTimeout(()=>{if(h.rodada&&h.rodada.estado==="votando")revelar();},1400);
+  }
+}
+
+function puxarCarta(){
+  if(!h.baralho.length){h.baralho=montarBaralho();h.reembaralhou=h.n>0;}else h.reembaralhou=false;
+  const c=h.baralho.shift();
+  if(!c) return;
+  h.n++;
+  h.rodada={n:h.n,t:c.t,nv:c.nv,estado:h.modo==="voto"?"votando":"escolhendo",culpados:[],cont:{},votos:null};
+  h.verVotos=false; h.cartaNova=true; h.fase="jogo";
+}
+function darCarta(ids){
+  ids.forEach(id=>{const p=h.placar[id]||(h.placar[id]={cartas:0,pagos:0});p.cartas++;});
+}
+function revelar(){
+  const r=h.rodada; if(!r||r.estado!=="votando") return;
+  const v=votosDaRodada(),cont={};
+  Object.keys(v).forEach(de=>{const a=v[de];if(a)cont[a]=(cont[a]||0)+1;});
+  Object.keys(cont).forEach(id=>{h.recebidos[id]=(h.recebidos[id]||0)+cont[id];});
+  const max=Math.max(0,...Object.values(cont));
+  const culp=max>0?Object.keys(cont).filter(id=>cont[id]===max):[];
+  if(culp.length===1){
+    const c=culp[0], outros=Object.keys(v).filter(de=>de!==c);
+    if(outros.length>=2&&outros.every(de=>v[de]===c)) h.unanimes[c]=(h.unanimes[c]||0)+1;
+  }
+  r.cont=cont; r.culpados=culp; r.votos=v; r.estado="revelado";
+  darCarta(culp);
+  animarAte=Date.now()+4000;
+  salvarHost(); publicarEstado(); desenhar();
+}
+function escolherTV(id){
+  const r=h.rodada; if(!r||r.estado!=="escolhendo") return;
+  r.culpados=id?[id]:[]; r.estado="revelado"; darCarta(r.culpados);
+}
+function deve(id){const p=h.placar[id];if(!p||!h.porShot)return 0;return Math.max(0,Math.floor(p.cartas/h.porShot)-p.pagos);}
+
+/* ----- telas da TV ----- */
+function seg(acao,opcoes,atual){
+  return '<div class="seg">'+opcoes.map(o=>'<button data-a="'+acao+'" data-v="'+o[0]+'" aria-pressed="'+(String(atual)===String(o[0]))+'">'+o[1]+'</button>').join("")+'</div>';
+}
+function urlFone(){return location.origin+location.pathname+"?sala="+h.sala;}
+
+function telaInicio(){
+  const js=jogadores(), total=totalCartas(), pode=js.length>=3&&total>0;
+  let gente="";
+  if(h.modo==="voto"){
+    const status=rede.tipo==="local"
+      ?'<p class="aviso">Firebase ainda não configurado: o jogo está em modo de teste. A votação só funciona entre abas deste mesmo navegador. Para os celulares, cole a configuração do Firebase no começo do arquivo.</p>':"";
+    gente='<section class="bloco"><p class="rotulo">Entrem pelo celular</p>'+status+
+      '<div class="entrada"><div class="qr" id="qr" aria-label="QR Code para entrar na sala"></div>'+
+      '<div class="bloco"><span class="rotulo">Código da sala</span><span class="codigo">'+h.sala+'</span>'+
+      '<span class="endereco">'+esc(urlFone())+'</span>'+
+      '<p class="nota">Aponte a câmera para o QR Code, digite seu nome e pronto. Quem entrar aparece aqui embaixo.</p>'+
+      '<div class="acoes"><button class="btn sec mini" data-a="nova-sala">Abrir outra sala</button></div></div></div>'+
+      '<p class="rotulo">Na sala ('+js.length+')</p>'+
+      (js.length?'<ul class="pessoas">'+js.map(p=>'<li class="pessoa">'+esc(p.nome)+'<button class="x" data-a="expulsar" data-id="'+p.id+'" aria-label="Tirar '+esc(p.nome)+' da sala">Tirar</button></li>').join("")+'</ul>':'<p class="nota">Ninguém entrou ainda.</p>')+
+    '</section>';
+  }else{
+    gente='<section class="bloco"><p class="rotulo">Quem está jogando</p>'+
+      (h.exemploTV?'<p class="nota">Nomes de exemplo. Troque pelos da turma.</p>':'')+
+      '<ul class="lista-tv">'+h.jogadoresTV.map((p,i)=>'<li><input type="text" id="nome-'+p.id+'" data-nome="'+p.id+'" value="'+esc(p.nome)+'" maxlength="20" aria-label="Jogador '+(i+1)+'" autocomplete="off"><button class="btn sec mini" data-a="tirar-tv" data-id="'+p.id+'">Tirar</button></li>').join("")+'</ul>'+
+      (h.jogadoresTV.length<20?'<form class="linha-form" id="form-tv"><input type="text" id="novo-tv" maxlength="20" placeholder="Nome de quem chegou" aria-label="Novo jogador" autocomplete="off"><button class="btn sec" type="submit">Adicionar</button></form>':'')+
+    '</section>';
+  }
+  const niveis='<div class="seg">'+Object.keys(NIVEIS).map(nv=>'<button data-a="nivel" data-v="'+nv+'" aria-pressed="'+!!h.niveis[nv]+'">'+NIVEIS[nv]+' · <span data-conta="'+nv+'">'+contaNivel(nv)+'</span></button>').join("")+'</div>';
+  return ''+
+  '<section class="bloco"><p class="rotulo">Como vai ser</p>'+
+    seg("modo",[["tv","Todo mundo aponta, a TV marca"],["voto",temFirebase?"Cada um vota no celular":"Votar no celular (precisa do Firebase)"]],h.modo)+
+    '<p class="nota">'+(h.modo==="voto"?"A carta aparece na TV, cada um vota em segredo no próprio celular e a TV revela a contagem. Quem tiver mais votos leva a carta; empate, todos os empatados levam.":"A carta aparece na TV, a turma discute e aponta, e quem está com o controle toca no escolhido.")+'</p>'+
+  '</section>'+gente+
+  '<section class="bloco"><div class="ajustes">'+
+    '<div class="ajuste"><p class="rotulo">Cartas no baralho</p>'+niveis+'<p class="nota" id="total-cartas">'+pl(total,"carta","cartas")+' no baralho.</p></div>'+
+    '<div class="ajuste"><p class="rotulo">Quem leva a carta bebe</p>'+seg("porshot",[[1,"A cada carta"],[2,"A cada 2"],[3,"A cada 3"],[0,"Sem bebida"]],h.porShot)+'<p class="nota">O placar marca a dívida e quem paga toca em "Bebeu".</p></div>'+
+  '</div></section>'+
+  '<section class="bloco"><p class="rotulo">Cartas da turma</p>'+
+    '<textarea id="turma" placeholder="Uma carta por linha. Ex.: Quem já dormiu no Uber e acordou em outra cidade?">'+esc(h.turma)+'</textarea>'+
+    '<p class="nota">Elas entram no nível "Da turma" e ficam salvas neste aparelho.</p>'+
+  '</section>'+
+  '<section class="bloco"><div class="acoes"><button class="btn" data-a="comecar"'+(pode?"":" disabled")+'>'+(h.n>0?"Voltar ao jogo":"Puxar a primeira carta")+'</button>'+
+    (pode?"":'<span class="nota">'+(js.length<3?"Precisa de pelo menos 3 pessoas.":"Ligue pelo menos um nível com cartas.")+'</span>')+
+    (h.n>0?'<button class="btn sec" data-a="encerrar">Encerrar a noite</button>':'')+
+  '</div></section>';
+}
+
+function cartaHTML(r,extra){
+  return '<div class="carta'+(h.cartaNova?" nova":"")+'"><span class="nivel">'+NIVEIS[r.nv]+'</span><p class="texto">'+esc(r.t)+'</p><span class="rodape-carta">Carta '+r.n+(extra?" · "+extra:"")+'</span></div>';
+}
+
+function telaJogo(){
+  const r=h.rodada, js=jogadores();
+  let h1=cartaHTML(r,h.reembaralhou?"baralho embaralhado de novo":"");
+  let corpo="";
+  if(r.estado==="votando"){
+    const v=votosDaRodada(), ja=js.filter(p=>v[p.id]).length;
+    corpo='<section class="bloco"><p class="rotulo">Votos: '+ja+" de "+js.length+'</p>'+
+      '<ul class="pessoas">'+js.map(p=>'<li class="pessoa '+(v[p.id]?"votou":"esperando")+'">'+esc(p.nome)+'</li>').join("")+'</ul>'+
+      '<div class="acoes"><button class="btn" data-a="revelar"'+(ja?"":" disabled")+'>'+(ja<js.length?"Revelar com quem já votou":"Revelar")+'</button><button class="btn sec" data-a="pular">Pular carta</button></div>'+
+      '<p class="nota">Quando todo mundo votar, a TV revela sozinha.</p></section>';
+  }else if(r.estado==="escolhendo"){
+    corpo='<section class="bloco"><p class="rotulo">Quem leva esta?</p><div class="alvos">'+
+      js.map(p=>'<button class="alvo" data-a="escolher" data-id="'+p.id+'">'+esc(p.nome)+'</button>').join("")+
+      '</div><div class="acoes"><button class="btn sec" data-a="pular">Pular carta</button></div></section>';
+  }else{
+    const culp=r.culpados.map(nomeDe);
+    let apur="";
+    if(h.modo==="voto"){
+      const cont=r.cont||{};
+      const linhas=js.filter(p=>cont[p.id]).concat(Object.keys(cont).filter(id=>!js.find(p=>p.id===id)).map(id=>({id,nome:nomeDe(id)})))
+        .sort((a,b)=>(cont[a.id]||0)-(cont[b.id]||0));
+      const max=Math.max(1,...Object.values(cont));
+      apur='<div class="apuracao">'+linhas.map((p,i)=>'<div class="barra'+(r.culpados.indexOf(p.id)>=0?" culpado":"")+'" style="--i:'+i+'"><span class="quem">'+esc(p.nome)+'</span><span class="trilho"><span class="enche" style="display:block;width:'+Math.round((cont[p.id]/max)*100)+'%"></span></span><span class="n">'+cont[p.id]+'</span></div>').join("")+'</div>';
+      var nLinhas=linhas.length;
+    }
+    const ver=culp.length?(culp.length>1?lista(culp)+" empataram e levam a carta":lista(culp)+" leva a carta"):"Ninguém levou esta";
+    const goles=h.porShot&&culp.length?r.culpados.filter(id=>{const p=h.placar[id];return p&&p.cartas%h.porShot===0;}).map(nomeDe):[];
+    let dedos="";
+    if(h.modo==="voto"&&h.verVotos){
+      const v=r.votos||{};
+      dedos='<ul class="dedos">'+Object.keys(v).map(de=>'<li>'+esc(nomeDe(de))+' <span>votou em</span> '+esc(nomeDe(v[de]))+'</li>').join("")+'</ul>';
+    }
+    corpo='<section class="bloco'+(Date.now()<animarAte&&!reduz?" anima":"")+'" style="--n:'+(nLinhas||0)+'">'+apur+
+      '<p class="veredito">'+esc(ver)+(goles.length?". "+esc(lista(goles))+(goles.length>1?" bebem.":" bebe."):".")+'</p></section>'+
+      '<section class="bloco"><div class="acoes"><button class="btn" data-a="proxima">Próxima carta</button>'+
+      (h.modo==="voto"?'<button class="btn sec" data-a="ver-votos">'+(h.verVotos?"Esconder quem votou em quem":"Mostrar quem votou em quem")+'</button>':'')+
+      '</div>'+dedos+'</section>';
+  }
+  return '<section class="bloco">'+h1+'</section>'+corpo+
+    '<section class="bloco"><div class="acoes"><button class="btn sec mini" data-a="ajustes">Ajustes e jogadores</button><button class="btn sec mini" data-a="encerrar">Encerrar a noite</button></div></section>';
+}
+
+function rankingDados(){
+  const ids=new Set(jogadores().map(p=>p.id).concat(Object.keys(h.placar)));
+  return Array.from(ids).map(id=>({id,nome:nomeDe(id),cartas:(h.placar[id]||{}).cartas||0,votos:h.recebidos[id]||0,unan:h.unanimes[id]||0}))
+    .sort((a,b)=>b.cartas-a.cartas||b.votos-a.votos);
+}
+function telaFim(){
+  const rk=rankingDados(), top=rk[0];
+  const topo=rk.filter(x=>top&&x.cartas===top.cartas&&x.cartas>0).map(x=>x.nome);
+  const titulo=(nome,campo,txt)=>{const m=Math.max(0,...rk.map(x=>x[campo]));if(!m)return "";const q=rk.filter(x=>x[campo]===m).map(x=>x.nome);return '<div class="titulo"><h3>'+nome+'</h3><strong>'+esc(lista(q))+'</strong><span>'+txt(m)+'</span></div>';};
+  const tit=(h.modo==="voto"||Object.keys(h.recebidos).length)?
+    titulo("Alvo preferido","votos",m=>"recebeu "+pl(m,"voto","votos")+" na noite")+titulo("Unanimidade","unan",m=>"levou "+pl(m,"carta","cartas")+" com o voto de todo mundo"):"";
+  return '<section class="bloco"><p class="rotulo">Fim de noite · '+pl(h.n,"carta","cartas")+'</p>'+
+    '<h2 class="chamada">'+(topo.length?esc(lista(topo))+(topo.length>1?" dividem":" leva")+" o título de Amigo da Onça da noite":"Ninguém levou carta nenhuma. Turma santa.")+'</h2></section>'+
+    (tit?'<section class="titulos">'+tit+'</section>':'')+
+    '<section class="bloco"><div class="rank-rolo"><table class="rank"><thead><tr><th>Lugar</th><th>Nome</th><th>Cartas</th>'+(tit?'<th>Votos</th>':'')+'</tr></thead><tbody>'+
+    rk.map((x,i)=>'<tr'+(topo.indexOf(x.nome)>=0?' class="topo-rank"':'')+'><td>'+(i+1)+'º</td><td>'+esc(x.nome)+'</td><td>'+x.cartas+'</td>'+(tit?'<td>'+x.votos+'</td>':'')+'</tr>').join("")+
+    '</tbody></table></div></section>'+
+    '<section class="bloco"><div class="acoes"><button class="btn" data-a="ajustes">Voltar ao jogo</button>'+
+    (h.zerar?'<span class="nota">Apagar o placar da noite?</span><button class="btn perigo" data-a="zerar-sim">Apagar</button><button class="btn sec" data-a="zerar-nao">Manter</button>':'<button class="btn sec" data-a="zerar">Zerar o placar</button>')+
+    '</div></section>';
+}
+
+function placarHTML(){
+  const rk=rankingDados();
+  return '<h2>Placar</h2><p class="nota">'+(h.porShot?(h.porShot===1?"Cada carta vale um gole.":"A cada "+h.porShot+" cartas, um gole."):"Só pontos, sem bebida.")+'</p>'+
+    (rk.length?'<ul class="contas">'+rk.map(x=>{
+      const d=deve(x.id);
+      return '<li class="conta"><div class="conta-topo"><span class="conta-nome">'+esc(x.nome)+'</span><span class="cartinhas">'+(x.cartas<=12?Array(x.cartas).fill("<i></i>").join(""):"")+(x.cartas>12?'<b>'+x.cartas+'</b>':'')+'</span></div>'+
+        (d?'<div class="divida"><span class="deve">Deve '+pl(d,"gole","goles")+'</span><button class="btn sec mini" data-a="bebeu" data-id="'+x.id+'">Bebeu</button></div>':'<span class="conta-info">'+pl(x.cartas,"carta","cartas")+'</span>')+'</li>';
+    }).join("")+'</ul>':'<p class="nota">O placar aparece quando alguém entrar.</p>');
+}
+
+function desenharHost(){
+  const app=$("#app"); app.className="app host";
+  const ass=JSON.stringify([h,remoto,rede.conectado,Date.now()<animarAte]);
+  if(ass===ultimaAss) return; ultimaAss=ass;
+  const foco=document.activeElement&&document.activeElement.id;
+  const con=rede.tipo==="local"?'<span class="chip">Modo de teste</span>':(rede.conectado?'<span class="chip ok">Conectado</span>':'<span class="chip mal">Sem conexão</span>');
+  const palco=h.fase==="inicio"?telaInicio():(h.fase==="fim"?telaFim():telaJogo());
+  app.innerHTML='<header class="topo"><h1 class="marca">Amigos da <em>Onça</em></h1><div class="topo-lado">'+
+    (h.modo==="voto"?'<span class="chip sala">Sala '+h.sala+'</span>'+con:'')+
+    (h.n?'<span class="chip">Carta '+h.n+'</span>':'')+'</div></header>'+
+    '<main class="palco">'+palco+'</main><aside class="placar" aria-label="Placar">'+placarHTML()+'</aside>';
+  h.cartaNova=false;
+  const qr=$("#qr");
+  if(qr&&window.QRCode){try{new QRCode(qr,{text:urlFone(),width:200,height:200,colorDark:"#1A1209",colorLight:"#F2A33A",correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+  else if(qr){qr.innerHTML='<span class="codigo" style="color:#1A1209;font-size:28px">'+h.sala+'</span>';}
+  if(foco){const el=document.getElementById(foco);if(el&&el.focus)el.focus();}
+}
+
+function agirHost(a,d){
+  const id=d.id;
+  switch(a){
+    case "modo": h.modo=d.v; if(h.modo==="voto") ligarSala(); else if(desligar){desligar();desligar=null;remoto={};} break;
+    case "nova-sala": rede.remove("salas/"+h.sala); h.sala=novoCodigo(); h.placar={}; h.recebidos={}; h.unanimes={}; h.n=0; h.rodada=null; h.baralho=[]; ligarSala(); break;
+    case "expulsar": rede.remove("salas/"+h.sala+"/jogadores/"+id); break;
+    case "tirar-tv": h.jogadoresTV=h.jogadoresTV.filter(p=>p.id!==id); h.exemploTV=false; break;
+    case "nivel": h.niveis[d.v]=!h.niveis[d.v]; h.baralho=[]; break;
+    case "porshot": h.porShot=+d.v; break;
+    case "comecar": if(h.rodada&&h.rodada.estado!=="revelado"){h.fase="jogo";} else puxarCarta(); break;
+    case "revelar": revelar(); return;
+    case "pular": puxarCarta(); break;
+    case "escolher": escolherTV(id); break;
+    case "proxima": puxarCarta(); break;
+    case "ver-votos": h.verVotos=!h.verVotos; break;
+    case "ajustes": h.fase="inicio"; h.zerar=false; break;
+    case "encerrar": h.fase="fim"; break;
+    case "bebeu": {const p=h.placar[id]; if(p&&deve(id)) p.pagos++; break;}
+    case "zerar": h.zerar=true; break;
+    case "zerar-nao": h.zerar=false; break;
+    case "zerar-sim": h.placar={}; h.recebidos={}; h.unanimes={}; h.n=0; h.rodada=null; h.baralho=[]; h.zerar=false; h.fase="inicio"; if(h.modo==="voto") rede.remove("salas/"+h.sala+"/votos"); break;
+    default: return;
+  }
+  salvarHost(); publicarEstado(); desenhar();
+}
+
+/* =====================================================================
+   CELULAR
+   ===================================================================== */
+const CHAVE_FONE="aonca-fone-"+SALA_FONE;
+let eu=abrir(CHAVE_FONE)||{id:null,nome:""}, sala=null, voto=null;
+
+function entrar(nome){
+  eu={id:eu.id||novoId(),nome:nome.slice(0,20)}; guardar(CHAVE_FONE,eu);
+  rede.set("salas/"+SALA_FONE+"/jogadores/"+eu.id,{nome:eu.nome,entrou:Date.now()});
+}
+function telaFone(){
+  const s=sala;
+  if(s===null) return '<section class="bloco"><p class="nota">Procurando a sala '+SALA_FONE+'…</p></section>';
+  if(!s.fase) return '<section class="bloco"><h2 class="chamada">Sala '+SALA_FONE+' não encontrada</h2><p class="nota">Confira o código na TV ou leia o QR Code de novo.</p></section>';
+  const dentro=eu.id&&s.jogadores&&s.jogadores[eu.id];
+  if(!dentro){
+    return '<section class="bloco"><p class="rotulo">Sala '+SALA_FONE+'</p><h2 class="chamada">'+(eu.id?"Você saiu da sala. Quer voltar?":"Como a turma te chama?")+'</h2>'+
+      '<form class="linha-form" id="form-entrar"><input type="text" id="meu-nome" maxlength="20" value="'+esc(eu.nome)+'" placeholder="Seu nome" aria-label="Seu nome" autocomplete="off" required><button class="btn" type="submit">Entrar</button></form></section>';
+  }
+  const js=Object.keys(s.jogadores).map(id=>({id,nome:s.jogadores[id].nome,entrou:s.jogadores[id].entrou||0})).sort((a,b)=>a.entrou-b.entrou);
+  const meu=(s.placar&&s.placar[eu.id]&&s.placar[eu.id].cartas)||0;
+  const pe='<section class="bloco"><p class="nota">Você é '+esc(eu.nome)+' · '+pl(meu,"carta levada","cartas levadas")+'.</p></section>';
+  const r=s.rodada;
+  if(s.fase==="fim"){
+    const rk=Object.keys(s.placar||{}).map(id=>s.placar[id]).sort((a,b)=>b.cartas-a.cartas);
+    return '<section class="bloco"><p class="rotulo">Fim de noite</p><h2 class="chamada">Olha a TV</h2><div class="rank-rolo"><table class="rank"><thead><tr><th>Lugar</th><th>Nome</th><th>Cartas</th></tr></thead><tbody>'+
+      rk.map((x,i)=>'<tr><td>'+(i+1)+'º</td><td>'+esc(x.nome)+'</td><td>'+x.cartas+'</td></tr>').join("")+'</tbody></table></div></section>'+pe;
+  }
+  if(!r||s.fase!=="jogo"){
+    return '<section class="bloco"><p class="rotulo">Sala '+SALA_FONE+'</p><h2 class="chamada">Você está dentro</h2><p class="nota">Espere a próxima carta aparecer na TV.</p>'+
+      '<ul class="pessoas">'+js.map(p=>'<li class="pessoa">'+esc(p.nome)+'</li>').join("")+'</ul></section>'+pe;
+  }
+  const carta='<div class="carta"><span class="nivel">'+(NIVEIS[r.nv]||"")+'</span><p class="texto">'+esc(r.t)+'</p><span class="rodape-carta">Carta '+r.n+'</span></div>';
+  if(r.estado==="votando"){
+    const meuVoto=((s.votos||{})[r.n]||{})[eu.id]||null;
+    return '<section class="bloco">'+carta+'</section><section class="bloco"><p class="rotulo">'+(meuVoto?"Voto registrado. Toque em outro nome para mudar.":"Seu voto é secreto")+'</p><div class="alvos">'+
+      js.filter(p=>p.id!==eu.id).map(p=>'<button class="alvo" data-a="votar" data-id="'+p.id+'" aria-pressed="'+(meuVoto===p.id)+'">'+esc(p.nome)+'</button>').join("")+'</div></section>'+pe;
+  }
+  const culp=(r.culpados||[]).map(id=>(s.jogadores[id]&&s.jogadores[id].nome)||(s.placar&&s.placar[id]&&s.placar[id].nome)||"Alguém");
+  const euLevei=(r.culpados||[]).indexOf(eu.id)>=0;
+  return '<section class="bloco">'+carta+'</section><section class="bloco"><p class="veredito">'+(euLevei?"Você levou essa.":(culp.length?esc(lista(culp))+(culp.length>1?" levaram.":" levou."):"Ninguém levou essa."))+'</p>'+
+    '<p class="nota">'+((r.cont&&r.cont[eu.id])?"Você recebeu "+pl(r.cont[eu.id],"voto","votos")+" nesta carta.":"Você não recebeu votos nesta carta.")+'</p></section>'+pe;
+}
+function desenharFone(){
+  const app=$("#app"); app.className="app fone";
+  const foco=document.activeElement&&document.activeElement.id, val=foco==="meu-nome"?document.activeElement.value:null;
+  app.innerHTML='<header class="topo"><h1 class="marca">Amigos da <em>Onça</em></h1><div class="topo-lado"><span class="chip sala">Sala '+esc(SALA_FONE)+'</span>'+
+    (rede.tipo==="local"?'<span class="chip">Modo de teste</span>':(rede.conectado?'<span class="chip ok">Conectado</span>':'<span class="chip mal">Sem conexão</span>'))+'</div></header>'+
+    '<main class="palco">'+telaFone()+'</main>';
+  if(foco){const el=document.getElementById(foco);if(el){if(val!=null)el.value=val;el.focus();}}
+}
+
+/* ---------------- Eventos ---------------- */
+function desenhar(){ if(EH_FONE) desenharFone(); else if(h) desenharHost(); }
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-a]"); if(!b||b.disabled) return;
+  if(EH_FONE){
+    if(b.dataset.a==="votar"&&sala&&sala.rodada&&sala.rodada.estado==="votando"&&eu.id){
+      rede.set("salas/"+SALA_FONE+"/votos/"+sala.rodada.n+"/"+eu.id,b.dataset.id);
+    }
+    return;
+  }
+  agirHost(b.dataset.a,b.dataset);
+});
+document.addEventListener("submit",e=>{
+  e.preventDefault();
+  if(e.target.id==="form-entrar"){const n=$("#meu-nome").value.trim();if(n)entrar(n);}
+  if(e.target.id==="form-tv"){const c=$("#novo-tv"),n=c.value.trim();if(!n)return;h.jogadoresTV.push({id:novoId(),nome:n});h.exemploTV=false;salvarHost();desenhar();const c2=$("#novo-tv");if(c2)c2.focus();}
+});
+document.addEventListener("input",e=>{
+  if(EH_FONE) return;
+  const el=e.target;
+  if(el.dataset&&el.dataset.nome){const p=h.jogadoresTV.find(x=>x.id===el.dataset.nome);if(p){p.nome=el.value.trim();h.nomes[p.id]=p.nome;h.exemploTV=false;salvarHost();ultimaAss="";}}
+  if(el.id==="turma"){
+    h.turma=el.value; h.baralho=[]; salvarHost();
+    const c=document.querySelector('[data-conta="turma"]'); if(c) c.textContent=contaNivel("turma");
+    const t=$("#total-cartas"); if(t) t.textContent=pl(totalCartas(),"carta","cartas")+" no baralho.";
+  }
+});
+document.addEventListener("change",e=>{ if(!EH_FONE&&(e.target.dataset.nome||e.target.id==="turma")){ultimaAss="";desenhar();} });
+
+let trava=null;
+function manterTela(){ if(trava||!navigator.wakeLock) return; navigator.wakeLock.request("screen").then(w=>{trava=w;w.addEventListener("release",()=>{trava=null;});}).catch(()=>{}); }
+document.addEventListener("click",manterTela,{once:false});
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") manterTela(); });
+
+/* ---------------- Início ---------------- */
+if(EH_FONE){
+  desenhar();
+  rede.ouvir("salas/"+SALA_FONE,v=>{sala=v||{};desenhar();});
+}else{
+  h=abrir(CHAVE_HOST)||hostNovo();
+  const base=hostNovo(); for(const k in base) if(h[k]===undefined) h[k]=base[k];
+  if(h.modo==="voto") ligarSala();
+  desenhar();
+}
+})();
+</script>
+</body>
+</html>
